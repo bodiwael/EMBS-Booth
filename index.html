@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BioAmp Lab</title>
+<style>
+:root{--bg:#e9eef3;--card:#fff;--ink:#14232f;--mute:#5b6b78;--line:#d3dce4;--teal:#0e7c86;--coral:#e4487b;--amber:#f2a33a;--screen:#10202b;--trace:#5ee0d0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px}
+h1{font-size:22px;margin:0 auto 0 0;letter-spacing:-.3px}
+.btn{border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;background:var(--ink);color:#fff}
+.btn.alt{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.rec{background:var(--coral)}
+.btn:focus-visible,.tab:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+.status{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:#b6c2cc}
+.dot.on{background:#2bb673}
+.scope{background:var(--screen);border-radius:16px;padding:10px;position:relative}
+canvas{width:100%;height:190px;display:block}
+.hint{position:absolute;inset:0;display:grid;place-items:center;color:#8fa6b5;pointer-events:none;text-align:center;padding:20px}
+.tabs{display:flex;gap:6px;margin:14px 0}
+.tab{flex:1;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 8px;font:inherit;font-weight:600;cursor:pointer;color:var(--mute)}
+.tab[aria-selected=true]{background:var(--teal);color:#fff;border-color:var(--teal)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.card{background:var(--card);border-radius:16px;padding:16px;border:1px solid var(--line)}
+.card h3{margin:0 0 6px;font-size:15px;color:var(--mute);font-weight:600}
+.big{font-size:40px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.sub{color:var(--mute);font-size:14px}
+.bar{height:12px;background:#e3e9ee;border-radius:8px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:var(--teal);transition:width .2s}
+.bar.warn i{background:var(--coral)}
+.wide{grid-column:1/-1}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-block;padding:4px 12px;border-radius:99px;background:#e3e9ee;color:var(--mute);font-weight:600;font-size:14px}
+.pill.hot{background:var(--coral);color:#fff}
+.pill.ok{background:#2bb673;color:#fff}
+.bands{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.bands div{text-align:center;font-size:14px}
+.col{height:90px;background:#e3e9ee;border-radius:8px;position:relative;overflow:hidden;margin-bottom:4px}
+.col i{position:absolute;bottom:0;left:0;right:0;background:var(--teal);height:0;transition:height .25s}
+.gaze{height:70px;background:#e3e9ee;border-radius:12px;position:relative;margin-top:8px}
+.gaze b{position:absolute;top:50%;left:50%;width:34px;height:34px;margin:-17px;border-radius:50%;background:var(--coral);transition:transform .08s,background .15s}
+.gaze b.blink{background:var(--ink);transform:scaleY(.15)!important}
+.help{font-size:14px;color:var(--mute)}
+label{font-size:14px;color:var(--mute)}
+input[type=range]{vertical-align:middle}
+[hidden]{display:none!important}
+@media(max-width:520px){.big{font-size:32px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>BioAmp Lab</h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="stat">Not connected</span></div>
+  <button class="btn" id="bConn">Connect board</button>
+  <button class="btn alt" id="bDemo">Try demo</button>
+  <button class="btn alt" id="bRec">Record CSV</button>
+</header>
+
+<div class="scope">
+  <canvas id="scope"></canvas>
+  <div class="hint" id="hint">Connect your board, or press Try demo to see how it works.</div>
+</div>
+
+<div class="row" style="margin-top:10px">
+  <label>Sensitivity <input type="range" id="sens" min="0.5" max="2" step="0.1" value="1"></label>
+  <span class="sub" id="sensV">1.0×</span>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" data-m="brain" aria-selected="true">Brain</button>
+  <button class="tab" role="tab" data-m="eyes" aria-selected="false">Eyes</button>
+  <button class="tab" role="tab" data-m="muscle" aria-selected="false">Muscle</button>
+</div>
+
+<!-- BRAIN -->
+<section data-p="brain" class="grid">
+  <div class="card wide">
+    <h3>Confusion detector (experimental)</h3>
+    <div class="row"><div class="big" id="confL">Calibrate first</div><span class="pill" id="sig">No signal</span><span class="pill" id="closed" hidden>Eyes closed</span></div>
+    <div class="bar" id="confBar"><i id="conf"></i></div>
+    <p class="sub">Sit relaxed with eyes open and press calibrate. Then try hard mental maths (like 17 × 14) and watch it rise.</p>
+    <div class="row"><button class="btn" id="bCal">Calibrate (15 s)</button><span class="sub" id="calS"></span></div>
+  </div>
+  <div class="card"><h3>Focus</h3><div class="big" id="focusV">–</div><div class="bar"><i id="focus"></i></div></div>
+  <div class="card"><h3>Relaxation</h3><div class="big" id="relaxV">–</div><div class="bar"><i id="relax"></i></div></div>
+  <div class="card wide"><h3>Brain waves (share of total)</h3>
+    <div class="bands">
+      <div><div class="col"><i id="b0"></i></div>Delta</div>
+      <div><div class="col"><i id="b1"></i></div>Theta</div>
+      <div><div class="col"><i id="b2"></i></div>Alpha</div>
+      <div><div class="col"><i id="b3"></i></div>Beta</div>
+    </div></div>
+  <div class="card wide help">Electrodes: IN+ on forehead above one eyebrow, IN− behind the ear (bone), REF behind the other ear. Stay still and relaxed. Close your eyes and alpha should jump.</div>
+</section>
+
+<!-- EYES -->
+<section data-p="eyes" class="grid" hidden>
+  <div class="card wide"><h3>Gaze</h3>
+    <div class="big" id="eyeLast">Waiting…</div>
+    <div class="gaze"><b id="dotE"></b></div>
+    <label style="display:block;margin-top:10px"><input type="checkbox" id="inv"> Flip left/right</label>
+  </div>
+  <div class="card"><h3>Blinks</h3><div class="big" id="blinks">0</div><div class="sub"><span id="brate">0</span> per minute</div></div>
+  <div class="card"><h3>Looks</h3><div class="big"><span id="lcount">0</span> ◀ ▶ <span id="rcount">0</span></div><div class="sub">left and right</div></div>
+  <div class="card"><h3>Alertness</h3><div class="big" id="alert">–</div><div class="sub">from blink rate (very few or very many can mean tired or strained)</div></div>
+  <div class="card"><h3>&nbsp;</h3><button class="btn alt" id="bEyeReset">Reset counters</button></div>
+  <div class="card wide help">Left/right: IN+ right temple, IN− left temple, REF behind an ear. Blinks only: IN+ above one eye, IN− below it. Move your eyes, then hold still.</div>
+</section>
+
+<!-- MUSCLE -->
+<section data-p="muscle" class="grid" hidden>
+  <div class="card wide"><h3>Muscle power</h3><div class="big"><span id="pow">0</span>%</div><div class="bar"><i id="powBar"></i></div></div>
+  <div class="card"><h3>Reps</h3><div class="big" id="reps">0</div><div class="sub">Hold time <span id="hold">0.0</span> s</div></div>
+  <div class="card"><h3>Fatigue</h3><div class="big" id="fatV">–</div><div class="bar warn"><i id="fat"></i></div><div class="sub">Muscle frequency drops as you tire (<span id="mdf">–</span> Hz)</div></div>
+  <div class="card wide"><button class="btn alt" id="bMuscleReset">Reset reps and fatigue</button></div>
+  <div class="card wide help">Electrodes: IN+ and IN− about 3 cm apart on the belly of a muscle (for example the forearm), REF on a bony spot such as the elbow. Relax for 3 seconds, then flex.</div>
+</section>
+</main>
+
+<script>
+const FS=250,N=512,SC=FS*5,$=id=>document.getElementById(id);
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const wB=new Float32Array(N),wM=new Float32Array(N),sc=new Float32Array(SC);
+const S={mode:'brain',n:0,cnt:0,rate:0,live:false,
+  brain:{bp:null,base:null,left:0,acc:[0,0,0,0],typ:null,art:false,run:0,focus:50,relax:50,conf:25,closed:false,has:false},
+  emg:{env:0,nf:0,peak:0,level:0,active:false,reps:0,t0:0,hold:0,mdf:0,ref:null,rs:[],fat:0},
+  eog:{st:'idle',var:4,t0:0,t1:0,peak:0,sign:1,pos:0,blinks:0,L:0,R:0,last:'Waiting…',lastT:0,bt:[]}};
+const F={dc:null,lp20:0,lp10:0,base:0};
+let rec=false,recData=[],amp=10;
+const sens=()=>parseFloat($('sens').value);
+
+/* ---------- FFT ---------- */
+function fft(re,im){const n=re.length;
+  for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]]}}
+  for(let len=2;len<=n;len<<=1){const a=-2*Math.PI/len,wr=Math.cos(a),wi=Math.sin(a);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let k=0;k<len/2;k++){const p=i+k,q=p+len/2,
+      tr=re[q]*cr-im[q]*ci,ti=re[q]*ci+im[q]*cr;re[q]=re[p]-tr;im[q]=im[p]-ti;re[p]+=tr;im[p]+=ti;
+      const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}}
+function spec(w){const re=new Float64Array(N),im=new Float64Array(N);let m=0;
+  for(let i=0;i<N;i++){re[i]=w[(S.n+1+i)%N];m+=re[i]}m/=N;
+  for(let i=0;i<N;i++)re[i]=(re[i]-m)*(0.5-0.5*Math.cos(2*Math.PI*i/(N-1)));
+  fft(re,im);const P=new Float64Array(N/2);for(let k=0;k<N/2;k++)P[k]=re[k]*re[k]+im[k]*im[k];return P}
+const df=FS/N;
+const band=(P,a,b)=>{let s=0;for(let k=Math.ceil(a/df);k<=Math.floor(b/df);k++)s+=P[k];return s};
+
+/* ---------- per-sample pipeline ---------- */
+function onSample(v){
+  S.n++;S.cnt++;if(rec)recData.push(v);
+  if(F.dc===null){F.dc=v;F.lp20=v;F.lp10=v;F.base=v}
+  F.dc+=(v-F.dc)*.0248;const xb=v-F.dc;             // 1 Hz high-pass (EEG)
+  F.lp20+=(v-F.lp20)*.4;const xm=v-F.lp20;           // 20 Hz high-pass (EMG)
+  F.lp10+=(v-F.lp10)*.22;F.base+=(F.lp10-F.base)*.0037;const ev=F.lp10-F.base; // EOG
+  wB[S.n%N]=xb;wM[S.n%N]=xm;
+  sc[S.n%SC]=S.mode==='brain'?xb:S.mode==='muscle'?xm:ev;
+  emg(xm);eog(ev);
+  if(S.n%62===0&&S.n>=N){if(S.mode==='brain')brain();else if(S.mode==='muscle')mdf()}
+}
+
+/* ---------- BRAIN ---------- */
+function brain(){
+  const B=S.brain;B.has=true;let r=0;
+  for(let i=0;i<N;i++){const s=wB[i];r+=s*s}const rms=Math.sqrt(r/N);
+  if(B.typ===null)B.typ=rms;
+  B.art=rms>2.5*B.typ;
+  if(B.art){if(++B.run>20){B.typ=rms;B.run=0}return}
+  B.run=0;B.typ+=(rms-B.typ)*.05;
+  const P=spec(wB),d=band(P,1,4),t=band(P,4,8),a=band(P,8,12),b=band(P,12,30),tot=d+t+a+b+1e-9;
+  const r4=[d/tot,t/tot,a/tot,b/tot];
+  B.bp=B.bp?B.bp.map((x,i)=>x+(r4[i]-x)*.3):r4;
+  if(B.left>0){B.acc=B.acc.map((x,i)=>x+B.bp[i]);if(--B.left===0)B.base=B.acc.map(x=>x/60)}
+  if(B.base){
+    const [,t0,a0,b0]=B.base,[,t1,a1,b1]=B.bp,ln=Math.log;
+    const f=ln((b1/(a1+t1))/(b0/(a0+t0))),c=ln(t1/t0)+ln(b1/b0)-ln(a1/a0);
+    B.focus+=(clamp(50+40*f,0,100)-B.focus)*.2;
+    B.relax+=(clamp(50+40*ln(a1/a0),0,100)-B.relax)*.2;
+    B.conf+=(clamp(25+25*c,0,100)-B.conf)*.2;
+    B.closed=a1/a0>1.7;
+  }
+}
+$('bCal').onclick=()=>{const B=S.brain;B.base=null;B.acc=[0,0,0,0];B.left=60;};
+
+/* ---------- MUSCLE ---------- */
+function emg(xm){
+  const E=S.emg;E.env+=(Math.abs(xm)-E.env)*.08;const e=E.env;
+  if(S.n<1000){E.nf=e;E.peak=e;return}
+  if(!E.active)E.nf+=(e-E.nf)*.002;
+  E.peak=Math.max(e,E.peak*.9997);
+  const minR=10/sens();
+  E.level=clamp((e-E.nf)/Math.max(E.peak-E.nf,minR),0,1);
+  if(!E.active&&E.level>.55&&E.peak-E.nf>minR*.8){E.active=true;E.reps++;E.t0=S.n}
+  else if(E.active&&E.level<.25)E.active=false;
+  if(E.active)E.hold=(S.n-E.t0)/FS;
+}
+function mdf(){
+  const E=S.emg;if(!E.active||E.level<.4)return;
+  const P=spec(wM),a=Math.ceil(20/df),b=Math.floor(110/df);let tot=0;
+  for(let k=a;k<=b;k++)tot+=P[k];let c=0,k=a;for(;k<=b;k++){c+=P[k];if(c>=tot/2)break}
+  const f=k*df;E.mdf=E.mdf?E.mdf+(f-E.mdf)*.3:f;
+  if(E.ref===null){E.rs.push(E.mdf);if(E.rs.length>=12)E.ref=E.rs.reduce((x,y)=>x+y)/12}
+  else E.fat=clamp((1-E.mdf/E.ref)*100*4,0,100);
+}
+$('bMuscleReset').onclick=()=>{const E=S.emg;E.reps=0;E.ref=null;E.rs=[];E.fat=0;E.mdf=0};
+
+/* ---------- EYES ---------- */
+function eog(ev){
+  const G=S.eog,thr=Math.max(10,4*Math.sqrt(G.var))/sens();G.thr=thr;
+  if(G.st==='idle'){
+    G.var+=(ev*ev-G.var)*.002;
+    if(Math.abs(ev)>thr&&S.n>600){G.st='evt';G.t0=S.n;G.peak=Math.abs(ev);G.sign=Math.sign(ev)}
+  }else if(G.st==='evt'){
+    G.peak=Math.max(G.peak,Math.abs(ev));
+    if(S.n-G.t0>=70){
+      const now=performance.now();
+      if(Math.abs(ev)>.55*G.peak){
+        const right=(G.sign>0)!==$('inv').checked;
+        right?G.R++:G.L++;G.last=right?'Looked right ▶':'◀ Looked left';
+      }else{G.blinks++;G.bt.push(now);G.last='Blink';}
+      G.lastT=now;G.st='cool';G.t1=S.n;
+    }
+  }else if((S.n-G.t1>50&&Math.abs(ev)<thr*.6)||S.n-G.t1>250)G.st='idle';
+  G.pos+=(clamp(ev/(thr*2.5),-1,1)*($('inv').checked?-1:1)-G.pos)*.2;
+}
+$('bEyeReset').onclick=()=>{Object.assign(S.eog,{blinks:0,L:0,R:0,bt:[],last:'Waiting…'})};
+
+/* ---------- UI ---------- */
+const setBar=(id,v)=>{$(id).style.width=v+'%'};
+function ui(){
+  const live=S.live&&S.rate>0;
+  $('hint').hidden=live;
+  if(S.mode==='brain'){
+    const B=S.brain;
+    $('sig').textContent=!live?'No signal':B.art?'Movement – holding':'Signal clean';
+    $('sig').className='pill'+(live&&!B.art?' ok':'');
+    $('closed').hidden=!(B.base&&B.closed);
+    if(B.left>0){$('calS').textContent='Calibrating… '+Math.round(B.left/4)+' s left';$('confL').textContent='Calibrating…'}
+    else if(!B.base){$('calS').textContent='';$('confL').textContent='Calibrate first'}
+    else{$('calS').textContent='Calibrated';const c=B.conf;
+      $('confL').textContent=c<35?'Clear':c<60?'Working hard':'Likely confused';
+      setBar('conf',c);$('confBar').className='bar'+(c>=60?' warn':'');
+      $('focusV').textContent=Math.round(B.focus);setBar('focus',B.focus);
+      $('relaxV').textContent=Math.round(B.relax);setBar('relax',B.relax)}
+    if(B.bp)B.bp.forEach((v,i)=>$('b'+i).style.height=Math.min(100,v*100)+'%');
+  }else if(S.mode==='eyes'){
+    const G=S.eog,now=performance.now();
+    G.bt=G.bt.filter(t=>now-t<60000);
+    $('eyeLast').textContent=G.last;$('blinks').textContent=G.blinks;
+    $('brate').textContent=G.bt.length;$('lcount').textContent=G.L;$('rcount').textContent=G.R;
+    const d=$('dotE');d.style.transform='translateX('+(G.pos*110)+'px)';
+    d.classList.toggle('blink',G.last==='Blink'&&now-G.lastT<250);
+    const r=G.bt.length;$('alert').textContent=!live||S.n<3000?'–':r<5?'Staring / drowsy':r>30?'Strained':'Normal';
+  }else{
+    const E=S.emg,p=Math.round(E.level*100);
+    $('pow').textContent=p;setBar('powBar',p);$('reps').textContent=E.reps;
+    $('hold').textContent=E.hold.toFixed(1);
+    $('fatV').textContent=E.ref===null?'Measuring…':Math.round(E.fat)+'%';setBar('fat',E.fat);
+    $('mdf').textContent=E.mdf?Math.round(E.mdf):'–';
+  }
+  $('dot').className='dot'+(live?' on':'');
+  $('stat').textContent=live?(demoId?'Demo':'Live')+' · '+S.rate+' Hz':S.live?'Waiting for data…':'Not connected';
+}
+function draw(){
+  const c=$('scope'),g=c.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const w=c.width=c.clientWidth*dpr,h=c.height=c.clientHeight*dpr;
+  let m=0;for(let i=0;i<SC;i++)m=Math.max(m,Math.abs(sc[i]));
+  amp+=(Math.max(m,6)-amp)*.1;
+  g.strokeStyle='#27414f';g.lineWidth=dpr;g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();
+  g.strokeStyle='#5ee0d0';g.lineWidth=1.6*dpr;g.beginPath();
+  for(let x=0;x<w;x++){const i=(S.n+1+Math.floor(x/w*SC))%SC,y=h/2-sc[i]/amp*h*.45;x?g.lineTo(x,y):g.moveTo(x,y)}
+  g.stroke();ui();requestAnimationFrame(draw)
+}
+requestAnimationFrame(draw);
+setInterval(()=>{S.rate=S.cnt;S.cnt=0},1000);
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  S.mode=t.dataset.m;sc.fill(0);amp=10;
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===t));
+  document.querySelectorAll('[data-p]').forEach(p=>p.hidden=p.dataset.p!==S.mode)});
+$('sens').oninput=()=>$('sensV').textContent=parseFloat($('sens').value).toFixed(1)+'×';
+
+/* ---------- Serial ---------- */
+let port=null,reader=null;
+$('bConn').onclick=async()=>{
+  if(port){try{await reader.cancel()}catch(e){}return}
+  if(!('serial' in navigator)){alert('Web Serial needs Chrome or Edge on a computer. Open this file in one of them.');return}
+  try{
+    stopDemo();
+    port=await navigator.serial.requestPort();
+    await port.open({baudRate:115200});
+    S.live=true;$('bConn').textContent='Disconnect';
+    const dec=new TextDecoderStream();port.readable.pipeTo(dec.writable).catch(()=>{});
+    reader=dec.readable.getReader();let buf='';
+    while(true){const {value,done}=await reader.read();if(done)break;buf+=value;let i;
+      while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+        const n=parseInt(line,10);if(!isNaN(n)&&line.length<6)onSample(n)}}
+  }catch(e){if(e.name!=='NotFoundError')console.error(e)}
+  try{await port.close()}catch(e){}
+  port=null;reader=null;S.live=false;$('bConn').textContent='Connect board';
+};
+
+/* ---------- Demo ---------- */
+let demoId=null,dt=0;
+function stopDemo(){if(demoId){clearInterval(demoId);demoId=null;S.live=false;$('bDemo').textContent='Try demo'}}
+$('bDemo').onclick=()=>{
+  if(demoId){stopDemo();return}
+  if(port){return}
+  S.live=true;$('bDemo').textContent='Stop demo';
+  demoId=setInterval(()=>{for(let k=0;k<5;k++)onSample(Math.round(512+gen(++dt)))},20)};
+function gen(t){const s=t/FS,r=()=>Math.random()-.5,P=2*Math.PI;
+  if(S.mode==='brain')return (10+9*Math.sin(s*.25))*Math.sin(P*10*s)+(4+4*Math.sin(s*.13))*Math.sin(P*5.5*s)+3*Math.sin(P*20*s)+8*r();
+  if(S.mode==='muscle')return (Math.sin(s*1.6)>.2?80:4)*r();
+  const off=[0,40,0,-40][Math.floor(s/2)%4],q=t%900;
+  return off+(q<30?70*Math.sin(Math.PI*q/30):0)+3*r()}
+
+/* ---------- Record ---------- */
+$('bRec').onclick=()=>{
+  rec=!rec;$('bRec').textContent=rec?'Stop & save':'Record CSV';$('bRec').classList.toggle('rec',rec);
+  if(rec){recData=[];return}
+  const csv='sample,value\n'+recData.map((v,i)=>i+','+v).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='bioamp_'+Date.now()+'.csv';a.click()};
+</script>
+</body>
+</html>
